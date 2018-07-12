@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -9,21 +11,71 @@ import (
 	"time"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api"
+	_ "github.com/lib/pq"
 	"golang.org/x/net/html"
 )
 
-// Articles struct contains articles
+// Articles struct
 type Articles struct {
 	NewArticle, CurrentArticle string
 	Status                     bool
 }
 
-// Article contain fresh article
+//DB struct
+type DB struct {
+	Host, Port, User, Password, DBName, SSLMode string
+	Chats                                       []int64
+}
+
+// Article contains fresh article
 var Article Articles
 
-var reg = regexp.MustCompile(os.Getenv("REG"))
+// DataBase contains data for connect to database
+var DataBase = DB{
+	Host:     os.Getenv("HOST"),
+	Port:     os.Getenv("PORT"),
+	User:     os.Getenv("USER"),
+	Password: os.Getenv("PASSWORD"),
+	DBName:   os.Getenv("DBNAME"),
+	SSLMode:  os.Getenv("SSLMODE"),
+}
+
+var reg = regexp.MustCompile(`^` + os.Getenv("REG") + `\d\d\d\d/\d\d/\d\d/.`)
 
 var message1, message2 = os.Getenv("MSG"), os.Getenv("MSSG")
+
+func (d *DB) setData(username string, chatid int64) error {
+	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
+	db, err := sql.Open("postgres", dbInfo)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	query := `INSERT INTO users(username, chat_id) VALUES($1, $2);`
+	if db.Exec(query, `@`+username, chatid); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *DB) getData() error {
+	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
+	db, err := sql.Open("postgres", dbInfo)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT DISTINCT chat_id FROM users;`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		d.Chats = append(d.Chats, id)
+	}
+	return nil
+}
 
 func (a *Articles) getCurrentArticle(link string) error {
 	response, err := http.Get(link)
@@ -76,6 +128,7 @@ func (a *Articles) bot(token string) {
 	updates, err := bot.GetUpdatesChan(config)
 	for update := range updates {
 		if update.Message.Command() == "start" {
+			DataBase.setData(update.Message.Chat.UserName, update.Message.Chat.ID)
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, message1)
 			bot.Send(msg)
 		} else if update.Message.Command() == "check" {
@@ -85,6 +138,16 @@ func (a *Articles) bot(token string) {
 			} else {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, message2)
 				bot.Send(msg)
+			}
+		}
+	}
+	for tick := time.Tick(10 * time.Minute); ; <-tick {
+		if a.Status {
+			if err := DataBase.getData(); err != nil {
+				for _, v := range DataBase.Chats {
+					msg := tgbotapi.NewMessage(v, a.NewArticle)
+					bot.Send(msg)
+				}
 			}
 		}
 	}

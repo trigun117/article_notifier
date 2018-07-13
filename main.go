@@ -44,7 +44,7 @@ var reg = regexp.MustCompile(`^` + os.Getenv("LINK") + `\d\d\d\d/\d\d/\d\d/.`)
 
 var message1, message2 = os.Getenv("MSG"), os.Getenv("MSSG")
 
-func (d *DB) setData(username string, chatid int64) error {
+func (d *DB) addNewUser(username string, chatid int64) error {
 	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
 	db, err := sql.Open("postgres", dbInfo)
 	if err != nil {
@@ -58,14 +58,14 @@ func (d *DB) setData(username string, chatid int64) error {
 	return nil
 }
 
-func (d *DB) getData() error {
+func (d *DB) getSubscribers() error {
 	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
 	db, err := sql.Open("postgres", dbInfo)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	rows, err := db.Query(`SELECT DISTINCT chat_id FROM users;`)
+	rows, err := db.Query(`SELECT DISTINCT chat_id FROM subscribers;`)
 	if err != nil {
 		return err
 	}
@@ -73,6 +73,34 @@ func (d *DB) getData() error {
 		var id int64
 		rows.Scan(&id)
 		d.Chats = append(d.Chats, id)
+	}
+	return nil
+}
+
+func (d *DB) subscribe(username string, chatid int64) error {
+	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
+	db, err := sql.Open("postgres", dbInfo)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	query := `INSERT INTO subscribers(username, chat_id) VALUES($1, $2);`
+	if db.Exec(query, `@`+username, chatid); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *DB) unsubscribe(chatid int64) error {
+	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
+	db, err := sql.Open("postgres", dbInfo)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	query := `DELETE FROM subscribers WHERE chat_id=$1;`
+	if db.Exec(query, chatid); err != nil {
+		return err
 	}
 	return nil
 }
@@ -129,7 +157,7 @@ func (a *Articles) bot(token string) {
 	go func() {
 		for tick := time.Tick(10 * time.Minute); ; <-tick {
 			if a.Status {
-				if err := DataBase.getData(); err == nil {
+				if err := DataBase.getSubscribers(); err == nil {
 					for _, v := range DataBase.Chats {
 						msg := tgbotapi.NewMessage(v, a.NewArticle)
 						bot.Send(msg)
@@ -140,11 +168,12 @@ func (a *Articles) bot(token string) {
 		}
 	}()
 	for update := range updates {
-		if update.Message.Command() == "start" {
-			DataBase.setData(update.Message.Chat.UserName, update.Message.Chat.ID)
+		switch update.Message.Command() {
+		case "start":
+			DataBase.addNewUser(update.Message.Chat.UserName, update.Message.Chat.ID)
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, message1)
 			bot.Send(msg)
-		} else if update.Message.Command() == "check" {
+		case "check":
 			if a.Status {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, a.NewArticle)
 				bot.Send(msg)
@@ -152,6 +181,14 @@ func (a *Articles) bot(token string) {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, message2)
 				bot.Send(msg)
 			}
+		case "subscribe":
+			DataBase.subscribe(update.Message.Chat.UserName, update.Message.Chat.ID)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You have been subscribed")
+			bot.Send(msg)
+		case "unsubscribe":
+			DataBase.unsubscribe(update.Message.Chat.ID)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You have been unsubscribed")
+			bot.Send(msg)
 		}
 	}
 }

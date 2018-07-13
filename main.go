@@ -27,24 +27,38 @@ type DB struct {
 	Chats                                       []int64
 }
 
+// environment variables
+var (
+	link       = os.Getenv("LINK")
+	resource   = os.Getenv("RESOURCE")
+	botMessage = os.Getenv("MSG")
+	token      = os.Getenv("TOKEN")
+	host       = os.Getenv("HOST")
+	port       = os.Getenv("PORT")
+	user       = os.Getenv("USER")
+	password   = os.Getenv("PASSWORD")
+	dbName     = os.Getenv("DBNAME")
+	sslMode    = os.Getenv("SSLMODE")
+)
+
 // Article contains fresh article
 var Article Articles
 
 // DataBase contains data for connect to database
 var DataBase = DB{
-	Host:     os.Getenv("HOST"),
-	Port:     os.Getenv("PORT"),
-	User:     os.Getenv("USER"),
-	Password: os.Getenv("PASSWORD"),
-	DBName:   os.Getenv("DBNAME"),
-	SSLMode:  os.Getenv("SSLMODE"),
+	Host:     host,
+	Port:     port,
+	User:     user,
+	Password: password,
+	DBName:   dbName,
+	SSLMode:  sslMode,
 }
 
-var reg = regexp.MustCompile(`^` + os.Getenv("LINK") + `\d\d\d\d/\d\d/\d\d/.`)
+var reg = regexp.MustCompile(`^` + link + `\d\d\d\d/\d\d/\d\d/.`)
 
 var (
-	message1 = os.Getenv("MSG")
-	message2 = os.Getenv("MSSG")
+	message1 = fmt.Sprintf("Hi, I'll let you know if a new article is posted on %s. Here is my commands list.\nCommands List:\n/check - check if new article posted\n/subscribe - subscribe for notify about new article\n/unsubscribe - unsubscribe from notifications", resource)
+	message2 = botMessage
 )
 
 func (d *DB) addNewUser(username string, chatid int64) error {
@@ -213,12 +227,12 @@ func (a *Articles) bot(token string) {
 }
 
 func init() {
-	go Article.bot(os.Getenv("TOKEN"))
+	go Article.bot(token)
 }
 
 func main() {
 	for tick := time.Tick(10 * time.Minute); ; <-tick {
-		Article.getCurrentArticle(os.Getenv("LINK"))
+		Article.getCurrentArticle(link)
 		Article.compare()
 	}
 }

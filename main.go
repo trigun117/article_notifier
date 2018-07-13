@@ -42,7 +42,10 @@ var DataBase = DB{
 
 var reg = regexp.MustCompile(`^` + os.Getenv("LINK") + `\d\d\d\d/\d\d/\d\d/.`)
 
-var message1, message2 = os.Getenv("MSG"), os.Getenv("MSSG")
+var (
+	message1 = os.Getenv("MSG")
+	message2 = os.Getenv("MSSG")
+)
 
 func (d *DB) addNewUser(username string, chatid int64) error {
 	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
@@ -77,32 +80,36 @@ func (d *DB) getSubscribers() error {
 	return nil
 }
 
-func (d *DB) subscribe(username string, chatid int64) error {
+func (d *DB) subscribe(username string, chatid int64) (int64, error) {
 	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
 	db, err := sql.Open("postgres", dbInfo)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer db.Close()
-	query := `INSERT INTO subscribers(username, chat_id) VALUES($1, $2);`
-	if db.Exec(query, `@`+username, chatid); err != nil {
-		return err
+	query := `INSERT INTO subscribers(username, chat_id) SELECT $1, $2 WHERE NOT EXISTS(SELECT * FROM subscribers WHERE chat_id=$3)`
+	result, err := db.Exec(query, `@`+username, chatid, chatid)
+	if err != nil {
+		return 0, err
 	}
-	return nil
+	r, _ := result.RowsAffected()
+	return r, nil
 }
 
-func (d *DB) unsubscribe(chatid int64) error {
+func (d *DB) unsubscribe(chatid int64) (int64, error) {
 	dbInfo := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", d.Host, d.Port, d.User, d.Password, d.DBName, d.SSLMode)
 	db, err := sql.Open("postgres", dbInfo)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer db.Close()
 	query := `DELETE FROM subscribers WHERE chat_id=$1;`
-	if db.Exec(query, chatid); err != nil {
-		return err
+	result, err := db.Exec(query, chatid)
+	if err != nil {
+		return 0, err
 	}
-	return nil
+	r, _ := result.RowsAffected()
+	return r, nil
 }
 
 func (a *Articles) getCurrentArticle(link string) error {
@@ -182,13 +189,25 @@ func (a *Articles) bot(token string) {
 				bot.Send(msg)
 			}
 		case "subscribe":
-			DataBase.subscribe(update.Message.Chat.UserName, update.Message.Chat.ID)
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You have been subscribed")
-			bot.Send(msg)
+			if result, err := DataBase.subscribe(update.Message.Chat.UserName, update.Message.Chat.ID); err == nil {
+				if result == 1 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You have been subscribed")
+					bot.Send(msg)
+				} else if result == 0 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You are already subscribed")
+					bot.Send(msg)
+				}
+			}
 		case "unsubscribe":
-			DataBase.unsubscribe(update.Message.Chat.ID)
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You have been unsubscribed")
-			bot.Send(msg)
+			if result, err := DataBase.unsubscribe(update.Message.Chat.ID); err == nil {
+				if result == 1 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You have been unsubscribed")
+					bot.Send(msg)
+				} else if result == 0 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "You are not subscribed")
+					bot.Send(msg)
+				}
+			}
 		}
 	}
 }

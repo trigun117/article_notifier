@@ -40,7 +40,7 @@ var DataBase = DB{
 	SSLMode:  os.Getenv("SSLMODE"),
 }
 
-var reg = regexp.MustCompile(`^` + os.Getenv("REG") + `\d\d\d\d/\d\d/\d\d/.`)
+var reg = regexp.MustCompile(`^` + os.Getenv("LINK") + `\d\d\d\d/\d\d/\d\d/.`)
 
 var message1, message2 = os.Getenv("MSG"), os.Getenv("MSSG")
 
@@ -126,6 +126,19 @@ func (a *Articles) bot(token string) {
 	}
 	config := tgbotapi.NewUpdate(0)
 	updates, err := bot.GetUpdatesChan(config)
+	go func() {
+		for tick := time.Tick(10 * time.Minute); ; <-tick {
+			if a.Status {
+				if err := DataBase.getData(); err == nil {
+					for _, v := range DataBase.Chats {
+						msg := tgbotapi.NewMessage(v, a.NewArticle)
+						bot.Send(msg)
+					}
+				}
+				DataBase.Chats = nil
+			}
+		}
+	}()
 	for update := range updates {
 		if update.Message.Command() == "start" {
 			DataBase.setData(update.Message.Chat.UserName, update.Message.Chat.ID)
@@ -138,16 +151,6 @@ func (a *Articles) bot(token string) {
 			} else {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, message2)
 				bot.Send(msg)
-			}
-		}
-	}
-	for tick := time.Tick(10 * time.Minute); ; <-tick {
-		if a.Status {
-			if err := DataBase.getData(); err != nil {
-				for _, v := range DataBase.Chats {
-					msg := tgbotapi.NewMessage(v, a.NewArticle)
-					bot.Send(msg)
-				}
 			}
 		}
 	}

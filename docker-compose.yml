@@ -1,0 +1,27 @@
+version: '3.6'
+
+services:
+
+        db:
+                image: postgres
+                environment:
+                        POSTGRES_PASSWORD: set_your_db_password
+                volumes:
+                        - ./pgdata:/var/lib/postgresql/data
+
+        bot:
+                image: trigun117/article_notifier
+                restart: always
+                environment:
+                        TOKEN: set_bot_token
+                        LINK: link_to_resource
+                        RESOURCE: resource_name
+                        HOST: db
+                        PORT: 5432
+                        USER: postgres
+                        PASSWORD: set_your_database_password
+                        DBNAME: postgres
+                        SSLMODE: disable
+
+volumes:
+        pgdata: {}

@@ -1,0 +1,21 @@
+sudo: required
+
+language: go
+
+go:
+        - master
+
+addons:
+        apt:
+                package:
+                        - docker-ce
+
+after_success:
+        - CGO_ENABLED=0 go build
+
+deploy:
+        skip_cleanup: true
+        provider: script
+        script: sh build_docker.sh
+        on:
+                branch: master

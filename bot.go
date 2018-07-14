@@ -7,10 +7,7 @@ import (
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
-var (
-	message1 = fmt.Sprintf("Hi, I'll let you know if a new article is posted on %s. Here is my commands list.\n\nCommands List:\n/check - check if new article posted\n/subscribe - subscribe for notify about new article\n/unsubscribe - unsubscribe from notifications", resource)
-	message2 = botMessage
-)
+var message = fmt.Sprintf("Hi, I will notify you when a new article will be published on the %s. Here is my commands list.\n\nCommands List:\n/check - check if new article posted\n/subscribe - subscribe for receiving notify when new article posted\n/unsubscribe - unsubscribe from notifications", resource)
 
 // Bot func run telegram bot
 func Bot(token string) {
@@ -19,7 +16,7 @@ func Bot(token string) {
 		panic("Missing bot token")
 	}
 	config := tgbotapi.NewUpdate(0)
-	updates, err := bot.GetUpdatesChan(config)
+	updates, _ := bot.GetUpdatesChan(config)
 	go func() {
 		for tick := time.Tick(10 * time.Minute); ; <-tick {
 			if Article.Status {
@@ -37,14 +34,14 @@ func Bot(token string) {
 		switch update.Message.Command() {
 		case "start":
 			DataBase.addNewUser(update.Message.Chat.UserName, update.Message.Chat.ID)
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, message1)
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
 			bot.Send(msg)
 		case "check":
 			if Article.Status {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, Article.NewArticle)
 				bot.Send(msg)
 			} else {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, message2)
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "There are no new articles")
 				bot.Send(msg)
 			}
 		case "subscribe":
